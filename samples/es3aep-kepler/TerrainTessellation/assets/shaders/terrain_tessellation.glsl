@@ -35,6 +35,7 @@
 #extension GL_ARB_tessellation_shader : enable
 
 #define PROCEDURAL_TERRAIN 1
+#define NORMAL_FROM_HEIGHT_KERNEL 0
 
 #UNIFORMS
 #line 8
@@ -72,6 +73,52 @@ void main(){
     vec3 n = vec3(0, 1, 0);
     pos.y = h;
 
+#if NORMAL_FROM_HEIGHT_KERNEL
+
+    // Should be distance from one texel to another in same units as heightmap.
+    float sample_dist = 0.0001; 
+
+    mat3 height_kernel;
+    vec3 height_normals[8];
+    int normal_index = 0;
+
+    for(int i=0; i<3; i++)
+    {
+        for(int j=0; j<3; j++) 
+        {
+            float height_sample_x = pos.x + (i - 1) * sample_dist * tileSize.x; 
+            float height_sample_z = pos.z + (j - 1) * sample_dist * tileSize.z; 
+            // height_sample_x = clamp(height_sample_x, 0.0, 1.0); 
+            // height_sample_z = clamp(height_sample_z, 0.0, 1.0); 
+            vec3 height_sample = vec3(height_sample_x, 0.0, height_sample_z);
+            height_kernel[i][j] = terrain(height_sample.xz);
+
+            if (i != 1 || j != 1)
+            {
+                height_sample.y = height_kernel[i][j];
+
+                // The height y-axis and new sample point gives us a plane.
+                // The vector from original to new sample lies on that plane.
+                // The vector perpendicular the that vector can be used as a normal.
+                vec3 vec_on_height_sample_plane = vec3(height_sample.xy - pos.xy, 10);
+                vec3 normal_height_sample_plane = cross(vec_on_height_sample_plane, height_sample);
+                vec3 to_new_sample = height_sample - pos;
+                vec3 height_normal = height_sample.y > pos.y ?
+                                     normalize(cross(normal_height_sample_plane, to_new_sample)) :
+                                     normalize(cross(to_new_sample, normal_height_sample_plane));
+                height_normals[normal_index] = height_sample.y == pos.y ? vec3(0.0, 1.0, 0.0) : height_normal;
+                normal_index++;
+            }
+        }
+    }
+
+    vec3 generated_normal = vec3(0, 0, 0);
+    for(int i=0; i<8; i++)
+    {
+        generated_normal += height_normals[i];
+    }
+    generated_normal = normalize(generated_normal);
+
     // calculate normal
     vec2 triSize = tileSize.xz / In[0].tessLevelInner;
     vec3 pos_dx = pos.xyz + vec3(triSize.x, 0.0, 0.0);
@@ -79,6 +126,19 @@ void main(){
     pos_dx.y = terrain(pos_dx.xz);
     pos_dz.y = terrain(pos_dz.xz);
     n = normalize(cross(pos_dz - pos.xyz, pos_dx - pos.xyz));
+    n = generated_normal;
+
+#else
+
+    // calculate normal
+    vec2 triSize = tileSize.xz / In[0].tessLevelInner;
+    vec3 pos_dx = pos.xyz + vec3(triSize.x, 0.0, 0.0);
+    vec3 pos_dz = pos.xyz + vec3(0.0, 0.0, triSize.y);
+    pos_dx.y = terrain(pos_dx.xz);
+    pos_dz.y = terrain(pos_dz.xz);
+    n = normalize(cross(pos_dz - pos.xyz, pos_dx - pos.xyz));
+
+#endif
 
 #else
 

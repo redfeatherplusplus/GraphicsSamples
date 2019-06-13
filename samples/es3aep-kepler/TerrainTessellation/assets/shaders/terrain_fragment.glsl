@@ -35,6 +35,8 @@
 
 #UNIFORMS
 
+#define NORMAL_FROM_HEIGHT_KERNEL 0
+
 layout(location=1) in block {
     vec3 vertex;
     vec3 vertexEye;
@@ -159,5 +161,14 @@ vec3 shadeTerrain(vec3 vertex,
 
 void main()
 {
+
+#if NORMAL_FROM_HEIGHT_KERNEL
+
+    float h = terrain(0,0);
+
+#endif 
+
+    vec2 foo = vec2(1,2);
+
     fragColor = vec4(shadeTerrain(In.vertex.xyz, In.vertexEye.xyz, In.normal), 1.0);    // shade per pixel
 }
